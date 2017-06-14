@@ -1,0 +1,105 @@
+// Place all the styles related to the Index controller here.
+// They will automatically be included in application.css.
+// You can use Sass (SCSS) here: http://sass-lang.com/
+$red: #ce4844;
+$yellow: #f0ad4e;
+
+.connect4 {
+	min-width: 500px;
+	margin-left: auto;
+	margin-right: auto;
+	color: #333;
+
+	#msg {
+		text-align: center;
+		height: 30px;
+		padding-top: 3px;
+		visibility: hidden;
+	}
+
+	h3 {
+		text-align: center;
+	}
+
+	.body {
+		text-align: center;
+
+		.nav {
+
+			.mode {
+				float: left;
+				margin-left: 100px;
+			}
+
+			.status {
+				float: right;
+				margin-right: 100px;
+				height: 50px;
+
+				.player {
+					display: inline-block;
+					width: 100px;
+					padding: 5px;
+					float: left;
+					border-radius: 5px;
+				}
+
+				.p1 {
+					background-color: $red;
+				}
+
+				.p2 {
+					background-color: $yellow;
+				}
+			}
+		}
+
+		.reset {
+		    display: block;
+		    margin-left: auto;
+		    margin-right: auto;
+		    margin-top: 20px;
+		    display: none;
+		}
+
+		#board:hover {
+			cursor: pointer;
+		}
+
+		#board {
+			display: inline-block;
+			margin-top: 60px;
+
+			.row {
+				list-style: none outside none;
+				margin:	0px 0px;
+				padding-left: 0px;
+				margin-bottom: -10px;
+
+				.cell {
+					display: inline-block;
+					width: 70px;
+					height: 70px;
+					background-color: #2992fc;
+
+					.circle {
+					    margin-left: 10%;
+					    margin-top: 10%;
+					    width: 80%;
+					    height: 80%;
+					    border-radius: 50px;
+					    background-color: #fff;
+					}
+
+					.move-0 {
+						background-color: $red !important;
+					}
+
+					.move-1 {
+						background-color: $yellow !important;
+					}
+				}
+			}
+		}
+	}
+}
