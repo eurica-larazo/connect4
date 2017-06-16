@@ -33,7 +33,6 @@ gem 'jbuilder', '~> 2.5'
 # Use Capistrano for deployment
 # gem 'capistrano-rails', group: :development
 
-  
 gem 'thin'
 
 gem 'jquery-rails'
@@ -46,7 +45,7 @@ group :development, :test do
   gem 'capybara', '~> 2.13'
   gem 'selenium-webdriver'
   # Use sqlite3 as the database for Active Record
-  gem 'sqlite3'
+  gem 'pg'
 end
 
 group :development do
