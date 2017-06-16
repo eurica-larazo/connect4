@@ -28,8 +28,7 @@ $(function() {
 	var currentPlayer = 0;
 	var moveCount = 0;
 	var didEnd = false;
-	var aiMemory = {};
-	var aiPoints = {};
+	var lastMove = null;	
 
 	renderBoard();
 
@@ -68,15 +67,14 @@ $(function() {
 		currentPlayer = 0;
 		moveCount = 0;
 		didEnd = false;
-		aiMemory = {};
-		aiPoints = {};
+		lastMove = null;
 
 		hideMessage();
 
 		$('.play-mode').removeAttr('disabled')
 			.removeClass('btn-primary');
 
-		$('.circle').removeClass('move-0 move-1');
+		$('.circle').removeClass('move-0 move-1 win');
 
 		$(".p1, .p2").animate({
 		    marginLeft: '0px',
@@ -128,24 +126,39 @@ $(function() {
 		$('#board').html(board);
 	}
 
-	function move(column) {
-		var player = players[currentPlayer];
+	function markWinner(point) {
+		for (var i = 0; i < point.length; i++) {
+			$('div[data-point="' + point[i] + '"]').addClass('win');
+		}
+	}
 
+	function isAvailableMove(column) {
 		var topCol = row * column;
 		var botCol = topCol - (row - 1);
 
+		// get predicted move
 		var move = null;
 		for (var i = botCol; i <= topCol; i++) {
 			if (gameState[i] == null) {
-				moveCount++;
 				move = i;
-				gameState[i] = currentPlayer;
-				$('div[data-point="' + i + '"]').addClass('move-'+player['flag']);
 				break;
 			}
 		}
 
+		return move;
+	}
+
+	function move(column) {
+		var player = players[currentPlayer];
+
+		var move = isAvailableMove(column);
+
 		if (move != null) {
+			moveCount++;
+			lastMove = move;
+			gameState[move] = currentPlayer;
+			$('div[data-point="' + move + '"]').addClass('move-'+player['flag']);
+
 			var vertical = checkVertical(move);
 			var horizontal = checkHorizontal(move);
 			var diagonalRight = checkDiagonalRight(move);
@@ -164,6 +177,7 @@ $(function() {
 				didEnd = true;
 				return;
 			}
+
 			currentPlayer = currentPlayer ? 0 : 1;
 			animatePlayer();
 		}
@@ -189,46 +203,45 @@ $(function() {
 		$('#msg').css('visibility', 'hidden');
 	}
 
-	function checkVertical(move, memory, testPlayer) {
-		var player = testPlayer ? players[testPlayer] : players[currentPlayer];
+	function checkVertical(move) {
+		var player = players[currentPlayer];
 		var minDown = (Math.ceil(move / row) * row) - (row - 1);
-		var storedMemory = memory ? aiMemory[memory] : gameState;
 		var matchCount = 0;
+		var matchPossibility = [];
 
-		if (((move - minDown) + 1) >= winningMatch) {
+		if ((((move - minDown) + 1) >= winningMatch) || gameMode == 'ai') {
 
 			var checkFlag = true;
 			var checkingPoint = move;
 			while (checkFlag) {
-				if (storedMemory[checkingPoint] == player['flag']) {
+				if (gameState[checkingPoint] == player['flag']) {
 					matchCount++;
+					matchPossibility.push(checkingPoint);
 					checkingPoint--;
 				} else {
 					checkFlag = false;
 				}
 
 				if (matchCount == winningMatch) {
-					computeAiPoints(memory, matchCount);
+					markWinner(matchPossibility);
 					return true;
 				}
 
 				if (checkingPoint < minDown) {
-					computeAiPoints(memory, matchCount);
 					return false;
 				}
 			}
 		}
 
-		computeAiPoints(memory, matchCount);
 		return false;
 	}
 
-	function checkHorizontal(move, memory, testPlayer) {
-		var player = testPlayer ? players[testPlayer] : players[currentPlayer];
-		var matrixMax = row * col;
-		var rightColMax = (matrixMax - (move - 1)) / row;
+	function checkHorizontal(move) {
+		var player = players[currentPlayer];
+		var rightColMax = (maxMove - (move - 1)) / row;
 		var matchCount = 1; // +1 current point
-		var storedMemory = memory ? aiMemory[memory] : gameState;
+		var matchPossibility = [];
+		matchPossibility.push(move);
 
 		var checkFlag = true;
 		var checkingPoint = move;
@@ -237,19 +250,20 @@ $(function() {
 		while (checkFlag) {
 			checkingPoint += row;
 
-			if (checkingPoint > matrixMax) {
+			if (checkingPoint > maxMove) {
 				checkFlag = false;
 				break;
 			}
 
-			if (storedMemory[checkingPoint] == player['flag']) {
+			if (gameState[checkingPoint] == player['flag']) {
+				matchPossibility.push(checkingPoint);
 				matchCount++;
 			} else {
 				checkFlag = false;
 			}
 
 			if (matchCount == winningMatch) {
-				computeAiPoints(memory, matchCount);
+				markWinner(matchPossibility);
 				return true;
 			}
 		}
@@ -265,200 +279,555 @@ $(function() {
 				break;
 			}
 
-			if (storedMemory[checkingPoint] == player['flag']) {
+			if (gameState[checkingPoint] == player['flag']) {
+				matchPossibility.push(checkingPoint);
 				matchCount++;
 			} else {
 				checkFlag = false;
 			}
 
 			if (matchCount == winningMatch) {
-				computeAiPoints(memory, matchCount);
+				markWinner(matchPossibility);
 				return true;
 			}
 		}
-		computeAiPoints(memory, matchCount);
+
 		return false;
 	}
 
-	function checkDiagonalRight(move, memory, testPlayer) {
-		var player = testPlayer ? players[testPlayer] : players[currentPlayer];
+	function checkDiagonalRight(move) {
+		var player = players[currentPlayer];
 		var matchCount = 1; // +1 current point
-		var matrixMax = row * col;
-		var storedMemory = memory ? aiMemory[memory] : gameState;
+		var matchPossibility = [];
+		matchPossibility.push(move);
 
 		var checkFlag = true;
 		var checkingPoint = move;
 
 		// check diagonal up
-		while (checkFlag) {
-			checkingPoint += row + 1;
+		if (checkingPoint % row != 0) {
+			while (checkFlag) {
+				checkingPoint += row + 1;
 
-			if (checkingPoint > matrixMax) {
-				checkFlag = false;
-				break;
-			}
+				if (checkingPoint > maxMove) {
+					checkFlag = false;
+					break;
+				}
 
-			if (storedMemory[checkingPoint] == player['flag']) {
-				matchCount++;
-			} else {
-				checkFlag = false;
-			}
+				if (gameState[checkingPoint] == player['flag']) {
+					matchPossibility.push(checkingPoint);
+					matchCount++;
+				} else {
+					checkFlag = false;
+				}
 
-			if (matchCount == winningMatch) {
-				computeAiPoints(memory, matchCount);
-				return true;
-			}
+				if (matchCount == winningMatch) {
+					markWinner(matchPossibility);
+					return true;
+				}
 
-			if ((checkingPoint % row) == 0) {
-				checkFlag = false;
+				if ((checkingPoint % row) == 0) {
+					checkFlag = false;
+				}
 			}
 		}
 
 		// check diagonal down
 		checkFlag = true;
 		checkingPoint = move;
-		while (checkFlag) {
-			checkingPoint -= row + 1;
+		if (checkingPoint % row != 1) {
+			while (checkFlag) {
+				checkingPoint -= row + 1;
 
-			if (checkingPoint < 0) {
-				checkFlag = false;
-				break;
-			}
+				if (checkingPoint < 0) {
+					checkFlag = false;
+					break;
+				}
 
-			if (storedMemory[checkingPoint] == player['flag']) {
-				matchCount++;
-			} else {
-				checkFlag = false;
-			}
+				if (gameState[checkingPoint] == player['flag']) {
+					matchPossibility.push(checkingPoint);
+					matchCount++;
+				} else {
+					checkFlag = false;
+				}
 
-			if (matchCount == winningMatch) {
-				computeAiPoints(memory, matchCount);
-				return true;
-			}
+				if (matchCount == winningMatch) {
+					markWinner(matchPossibility);
+					return true;
+				}
 
-			var minDown = (Math.ceil(checkingPoint / row) * row) - (row - 1);
+				var minDown = (Math.ceil(checkingPoint / row) * row) - (row - 1);
 
-			if (checkingPoint == minDown) {
-				checkFlag = false;
+				if (checkingPoint == minDown) {
+					checkFlag = false;
+				}
 			}
 		}
 
-		computeAiPoints(memory, matchCount);
 		return false;
 	}
 
-	function checkDiagonalLeft(move, memory, testPlayer) {
-		var player = testPlayer ? players[testPlayer] : players[currentPlayer];
+	function checkDiagonalLeft(move) {
+		var player = players[currentPlayer];
 		var matchCount = 1; // +1 current point
-		var matrixMax = row * col;
-		var storedMemory = memory ? aiMemory[memory] : gameState;
+		var matchPossibility = [];
+		matchPossibility.push(move);
 
 		var checkFlag = true;
 		var checkingPoint = move;
 
 		// check diagonal up
-		while (checkFlag) {
-			checkingPoint -= row - 1;
+		if (checkingPoint % row != 0) {
+			while (checkFlag) {
+				checkingPoint -= row - 1;
 
-			if (checkingPoint < 0) {
-				checkFlag = false;
-				break;
-			}
+				if (checkingPoint < 0) {
+					checkFlag = false;
+					break;
+				}
 
-			if (storedMemory[checkingPoint] == player['flag']) {
-				matchCount++;
-			} else {
-				checkFlag = false;
-			}
+				if (gameState[checkingPoint] == player['flag']) {
+					matchPossibility.push(checkingPoint);
+					matchCount++;
+				} else {
+					checkFlag = false;
+				}
 
-			if (matchCount == winningMatch) {
-				computeAiPoints(memory, matchCount);
-				return true;
-			}
+				if (matchCount == winningMatch) {
+					markWinner(matchPossibility);
+					return true;
+				}
 
-			if ((checkingPoint % row) == 0) {
-				checkFlag = false;
+				if ((checkingPoint % row) == 0) {
+					checkFlag = false;
+				}
 			}
 		}
 
 		// check diagonal down
 		checkFlag = true;
 		checkingPoint = move;
-		while (checkFlag) {
-			checkingPoint += row - 1;
+		if (checkingPoint % row != 1) {
+			while (checkFlag) {
+				checkingPoint += row - 1;
 
-			if (checkingPoint > matrixMax) {
-				checkFlag = false;
-				break;
-			}
+				if (checkingPoint > maxMove) {
+					checkFlag = false;
+					break;
+				}
 
-			if (storedMemory[checkingPoint] == player['flag']) {
-				matchCount++;
-			} else {
-				checkFlag = false;
-			}
+				if (gameState[checkingPoint] == player['flag']) {
+					matchPossibility.push(checkingPoint);
+					matchCount++;
+				} else {
+					checkFlag = false;
+				}
 
-			if (matchCount == winningMatch) {
-				computeAiPoints(memory, matchCount);
-				return true;
-			}
+				if (matchCount == winningMatch) {
+					markWinner(matchPossibility);
+					return true;
+				}
 
-			var minDown = (Math.ceil(checkingPoint / row) * row) - (row - 1);
+				var minDown = (Math.ceil(checkingPoint / row) * row) - (row - 1);
 
-			if (checkingPoint == minDown) {
-				checkFlag = false;
+				if (checkingPoint == minDown) {
+					checkFlag = false;
+				}
 			}
 		}
 
-		computeAiPoints(memory, matchCount);
 		return false;
 	}
+
+	/*
+		Check if AI has Winning move
+		Check for human player Winning move
+		Predict Humna player best move
+		Find closest to human move
+	*/
 
 	function aiMove() {
-		for (var i = 1; i < col; i++) {
-			aiMemory[i] = gameState;
-			testMove(i, 0);
-			// break;
+		var ai = players[1];
+		var player1 = players[0];
+		var aiPredictedWinningMove = {};
+		var player1PredictedMove = {};
+		for (var i = 1; i <= col; i++) {
+			player1PredictedMove[i] = doTest(player1['flag'], i);
+			aiPredictedWinningMove[i] = doTest(ai['flag'], i);
 		}
-		console.log(aiPoints);
+
+		// Find AI winning move
+		for (var aiWin in aiPredictedWinningMove) {
+			if (aiPredictedWinningMove[aiWin] && aiPredictedWinningMove[aiWin]['total'] == 0) {
+				move(aiWin);
+				return;
+			}
+		}
+
+		// Counter PLayer 1 next winning move
+		var counterWinningMove = null;
+		var counterWinningMoveList = [];
+		for (var cMove in player1PredictedMove) {
+			if (player1PredictedMove[cMove]) {
+				if (player1PredictedMove[cMove]['total'] == 0) {
+					move(cMove);
+					return;
+				}
+
+				if (counterWinningMove == null) {
+					counterWinningMove = cMove;
+					counterWinningMoveList.push({ move: cMove, test: player1PredictedMove[cMove]['test'] });
+				} else if (player1PredictedMove[counterWinningMove]['total'] > player1PredictedMove[cMove]['total']) {
+					counterWinningMove = cMove;
+					counterWinningMoveList = [{ move: cMove, test: player1PredictedMove[cMove]['test'] }];
+				} else if (player1PredictedMove[counterWinningMove]['total'] == player1PredictedMove[cMove]['total']) {
+					counterWinningMoveList.push({ move: cMove, test: player1PredictedMove[cMove]['test'] });
+				}
+			}
+		}
+
+		if (counterWinningMoveList.length > 1) {
+
+			// Find the move with the lowest points
+			var bestWinningMoves = [];
+			var bestWinningPoint = null;
+			for (var i = 0; i < counterWinningMoveList.length; i++) {
+				var nodeBest = null;
+				for (var test in counterWinningMoveList[i]['test']) {
+					if (nodeBest == null) {
+						nodeBest = counterWinningMoveList[i]['test'][test];
+					} else if (nodeBest > counterWinningMoveList[i]['test'][test]) {
+						nodeBest = counterWinningMoveList[i]['test'][test];
+					}
+				}
+
+				if (bestWinningPoint == null) {
+					bestWinningPoint = nodeBest;
+					bestWinningMoves.push(counterWinningMoveList[i]);
+				} else if (bestWinningPoint > nodeBest) {
+					bestWinningPoint = nodeBest;
+					bestWinningMoves.push(counterWinningMoveList[i]);
+				} else if (bestWinningPoint == nodeBest) {
+					bestWinningMoves.push(counterWinningMoveList[i]);
+				}
+			}
+
+			// find closest move
+			if (bestWinningMoves.length > 1) {
+				var closestMove = null;
+				var closeDistance = null;
+				for (var b = 0; b < bestWinningMoves.length; b++) {
+					var movePoint = isAvailableMove(bestWinningMoves[b]['move']);
+					var distance = Math.abs(lastMove - movePoint);
+					if (closeDistance == null) {
+						closeDistance = distance;
+						closestMove = bestWinningMoves[b]['move'];
+					} else if (closeDistance > distance) {
+						 closeDistance = distance;
+						 closestMove = bestWinningMoves[b]['move'];
+					}
+				}
+				move(closestMove);
+			} else {
+				move(bestWinningMoves[0]['move']);
+			}
+		} else {
+			move(counterWinningMoveList[0]['move']);
+		}
 	}
 
-	function computeAiPoints(memory, matchCount) {
-		if (gameMode == 'ai' && memory) {
-			aiPoints[memory] = aiPoints[memory] ? aiPoints[memory] + (matchCount - winningMatch) : (matchCount - winningMatch);
+	function doTest(player, column) {
+		var move = isAvailableMove(column);
+
+		if (move != null) {
+			var predictGameState = JSON.parse(JSON.stringify(gameState));
+			predictGameState[move] = player;
+
+			var vertical = predictVertical(player, move, predictGameState);
+			var horizontal = predictHorizontal(player, move, predictGameState);
+			var diagonalRight = predictDiagonalRight(player, move, predictGameState);
+			var diagonalLeft = predictDiagonalLeft(player, move, predictGameState);
+
+			var data = {
+				test: {
+					vertical: vertical,
+					horizontal: horizontal,
+					diagonalRight: diagonalRight,
+					diagonalLeft: diagonalLeft
+				},
+				total: vertical + horizontal + diagonalRight + diagonalLeft
+			};
+
+			if (vertical == 0 || horizontal == 0 || diagonalRight == 0 || diagonalLeft == 0) {
+				data['total'] = 0;
+				return data;
+			}
+
+			return data;
 		}
 	}
 
-	function testMove(column, player) {
-		var memory = column;
-		var topCol = row * column;
-		var botCol = topCol - (row - 1);
+	function predictVertical(player, move, predictGameState) {
+		var minDown = (Math.ceil(move / row) * row) - (row - 1);
+		var maxUp = minDown + (row -1);
+		var matchCount = 0;
+		var checkFlag = true;
+		var checkingPoint = move;
 
-		var move = null;
-		for (var i = botCol; i <= topCol; i++) {
-			if (aiMemory[memory][i] != undefined && !aiMemory[memory][i+1]) {
-				move = i;
+		while (checkFlag) {
+			if (predictGameState[checkingPoint] == player) {
+				matchCount++;
+				checkingPoint--;
+			} else {
+				checkFlag = false;
+			}
+
+			if (checkingPoint < minDown) {
+				checkFlag = false;
+			}
+
+			if (matchCount == winningMatch) {
+				return 0;
+			}
+		}
+
+		// check for ramining moves if available
+		var remainingMoves = winningMatch - matchCount;
+		if (maxUp >= (move + remainingMoves)) {
+			return remainingMoves;
+		}
+		return winningMatch;
+	}
+
+	function predictHorizontal(player, move, predictGameState) {
+		var rightColMax = (maxMove - (move - 1)) / row;
+		var matchCount = 1; // +1 current point
+		var validMoves = 0;
+
+		// check from point to right
+		var checkFlag = true;
+		var checkingPoint = move;
+		var horizontalCount = 0;
+		while (checkFlag) {
+			horizontalCount++;
+			checkingPoint += row;
+			if (checkingPoint > maxMove || horizontalCount >= winningMatch) {
+				checkFlag = false;
 				break;
 			}
-			// if (aiMemory[memory] == null) {
-			// 	moveCount++;
-			// 	move = i;
-			// 	aiMemory[memory] = player;
-			// 	break;
-			// }
-		}
-		
-		if (move != null) {
-			var vertical = checkVertical(move, memory, player);
-			var horizontal = checkHorizontal(move, memory, player);
-			var diagonalRight = checkDiagonalRight(move, memory, player);
-			var diagonalLeft = checkDiagonalLeft(move, memory, player);
 
-			if (vertical || horizontal || diagonalRight || diagonalLeft) {
-				return true;
+			var minDown = (Math.ceil(checkingPoint / row) * row) - (row - 1);
+			if (predictGameState[checkingPoint] == player) {
+				matchCount++;
+			} else if ((minDown < checkingPoint && predictGameState[checkingPoint] == null && predictGameState[checkingPoint-1] != null)
+				|| (minDown == checkingPoint && predictGameState[checkingPoint] == null)) {
+				validMoves++;
+			} else {
+				checkFlag = false;
+			}
+
+			if (matchCount == winningMatch) {
+				return 0;
 			}
 		}
-		return false;
+
+		// check from point to left
+		checkFlag = true;
+		checkingPoint = move;
+		horizontalCount = 0;
+		while (checkFlag) {
+			horizontalCount++;
+			checkingPoint -= row;
+			if (checkingPoint < 0 || horizontalCount >= winningMatch) {
+				checkFlag = false;
+				break;
+			}
+
+			var minDown = (Math.ceil(checkingPoint / row) * row) - (row - 1);
+			if (predictGameState[checkingPoint] == player) {
+				matchCount++;
+			} else if ((minDown < checkingPoint && predictGameState[checkingPoint] == null && predictGameState[checkingPoint-1] != null)
+				|| (minDown == checkingPoint && predictGameState[checkingPoint] == null)) {
+				validMoves++;
+			} else {
+				checkFlag = false;
+			}
+
+			if (matchCount == winningMatch) {
+				return 0;
+			}
+		}
+
+		// check remaining moves if available
+		var remainingMoves = winningMatch - matchCount;
+
+		if (validMoves >= remainingMoves) {
+			return remainingMoves;
+		}
+		return winningMatch;
+	}
+
+
+	function predictDiagonalRight(player, move, predictGameState) {
+		var matchCount = 1; // +1 current point
+		var validMoves = 0;
+
+		// check diagonal up
+		var checkFlag = true;
+		var checkingPoint = move;
+		var diagonalCount = 0;
+		if (checkingPoint % row != 0) {
+			while (checkFlag) {
+				diagonalCount++;
+				checkingPoint += row + 1;
+
+				if (checkingPoint > maxMove || diagonalCount >= winningMatch) {
+					checkFlag = false;
+					break;
+				}
+
+				var minDown = (Math.ceil(checkingPoint / row) * row) - (row - 1);
+				var maxUp = minDown + (row -1);
+				if (predictGameState[checkingPoint] == player) {
+					matchCount++;
+				} else if ((minDown < checkingPoint && checkingPoint <= maxUp && predictGameState[checkingPoint] == null && predictGameState[checkingPoint-1] != null)
+					|| (minDown == checkingPoint && checkingPoint <= maxUp && predictGameState[checkingPoint] == null)) {
+					validMoves++;
+				} else {
+					checkFlag = false;
+				}
+
+				if (matchCount == winningMatch) {
+					return 0;
+				}
+			}
+		}
+
+		// check diagonal down
+		checkFlag = true;
+		checkingPoint = move;
+		diagonalCount = 0;
+		if (checkingPoint % row != 1) {
+			while (checkFlag) {
+				diagonalCount++;
+				checkingPoint -= row + 1;
+
+				if (checkingPoint < 0 || diagonalCount >= winningMatch) {
+					checkFlag = false;
+					break;
+				}
+
+				var minDown = (Math.ceil(checkingPoint / row) * row) - (row - 1);
+				if (predictGameState[checkingPoint] == player) {
+					matchCount++;
+				} else if ((minDown < checkingPoint && predictGameState[checkingPoint] == null && predictGameState[checkingPoint-1] != null)
+					|| (minDown == checkingPoint && predictGameState[checkingPoint] == null)) {
+					validMoves++;
+				} else {
+					checkFlag = false;
+				}
+
+				if (matchCount == winningMatch) {
+					return 0;
+				}
+
+				if (checkingPoint == minDown) {
+					checkFlag = false;
+				}
+			}
+		}
+
+		// check remaining moves if available
+		var remainingMoves = winningMatch - matchCount;
+
+		if (validMoves >= remainingMoves) {
+			return remainingMoves;
+		}
+		return winningMatch;
+	}
+
+	function predictDiagonalLeft(player, move, predictGameState) {
+		var matchCount = 1; // +1 current point
+		var validMoves = 0;
+
+		// check diagonal up
+		var checkFlag = true;
+		var checkingPoint = move;
+		var diagonalCount = 0;
+		if (checkingPoint % row != 0) {
+			while (checkFlag) {
+				diagonalCount++;
+				checkingPoint -= row - 1;
+
+				if (checkingPoint < 0  || diagonalCount >= winningMatch) {
+					checkFlag = false;
+					break;
+				}
+
+				var minDown = (Math.ceil(checkingPoint / row) * row) - (row - 1);
+				var maxUp = minDown + (row -1);
+				if (predictGameState[checkingPoint] == player) {
+					matchCount++;
+				} else if ((minDown < checkingPoint && checkingPoint <= maxUp && predictGameState[checkingPoint] == null && predictGameState[checkingPoint-1] != null)
+					|| (minDown == checkingPoint && checkingPoint <= maxUp && predictGameState[checkingPoint] == null)) {
+					validMoves++;
+				} else {
+					checkFlag = false;
+				}
+
+				if (matchCount == winningMatch) {
+					return 0;
+				}
+
+				if ((checkingPoint % row) == 0) {
+					checkFlag = false;
+				}
+			}
+		}
+
+		// check diagonal down
+		checkFlag = true;
+		checkingPoint = move;
+		diagonalCount = 0
+		if (checkingPoint % row != 1) {
+			while (checkFlag) {
+				diagonalCount++;
+				checkingPoint += row - 1;
+
+				if (checkingPoint > maxMove || diagonalCount >= winningMatch) {
+					checkFlag = false;
+					break;
+				}
+
+				var minDown = (Math.ceil(checkingPoint / row) * row) - (row - 1);
+				if (predictGameState[checkingPoint] == player) {
+					matchCount++;
+				} else if ((minDown < checkingPoint && predictGameState[checkingPoint] == null && predictGameState[checkingPoint-1] != null)
+					|| (minDown == checkingPoint && predictGameState[checkingPoint] == null)) {
+					validMoves++;
+				} else {
+					checkFlag = false;
+				}
+
+				if (matchCount == winningMatch) {
+					return 0;
+				}
+
+				var minDown = (Math.ceil(checkingPoint / row) * row) - (row - 1);
+
+				if (checkingPoint == minDown) {
+					checkFlag = false;
+				}
+			}
+		}
+
+		// check remaining moves if available
+		var remainingMoves = winningMatch - matchCount;
+
+		if (validMoves >= remainingMoves) {
+			return remainingMoves;
+		}
+		return winningMatch;
 	}
 
 });
