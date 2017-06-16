@@ -34,6 +34,7 @@ gem 'jbuilder', '~> 2.5'
 # gem 'capistrano-rails', group: :development
 
 gem 'thin'
+gem 'pg'
 
 gem 'jquery-rails'
 gem 'bootstrap-sass', '~> 3.2.0'
@@ -45,7 +46,6 @@ group :development, :test do
   gem 'capybara', '~> 2.13'
   gem 'selenium-webdriver'
   # Use sqlite3 as the database for Active Record
-  gem 'pg'
 end
 
 group :development do
